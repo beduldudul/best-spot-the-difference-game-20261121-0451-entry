@@ -1,151 +1,209 @@
-// The game state and its rules: rounds, finds, the clock, hearts, hints, score.
-// Nothing here draws; render.js paints what this holds.
+// Twin Tides — Spot the Difference
+// game.js — the rules, and nothing but the rules. No DOM, no canvas: this file
+// runs in Node for tests as well as in the browser. State, scoring, timer,
+// hearts, hints, streaks and round flow all live here.
 
-import { DIFFS_PER_ROUND, FIND_BONUS_SECONDS, HEARTS, HINT, POINTS, ROUND_MAX_SECONDS, ROUND_SECONDS, ROUNDS, WRONG_BEFORE_HEART } from './config.js';
-import { SCENES } from './scenes.js';
+import { BEST_KEY, RULES } from './config.js';
+import { ROUNDS, buildFlags } from './scenes.js';
 
-export const PHASE_TITLE = 'title';
-export const PHASE_PLAY = 'play';
-export const PHASE_PAUSED = 'paused';
-export const PHASE_ROUND_CLEAR = 'round-clear';
-export const PHASE_WIN = 'win';
-export const PHASE_OVER = 'over';
+export const SCREENS = ['title', 'play', 'paused', 'roundClear', 'win', 'gameOver'];
 
-/** A fresh game: round 0, nothing found, full clock and hearts. */
-export function createGame() {
-  return {
-    phase: PHASE_TITLE,
-    round: 0,
-    found: new Set(),
-    score: 0,
-    streak: 0,
-    timeLeft: ROUND_SECONDS,
-    hearts: HEARTS,
-    wrongStreak: 0,
-    hintLeft: 0,
-    hintCooldown: 0,
-    hintTarget: null,
-    message: 'Find 7 differences. Click a difference on either picture.',
-    best: 0,
-    roundScore: 0,
-    totalFound: 0,
-  };
-}
-
-/** The scene key and differences of the current round. */
-export function currentScene(game) {
-  return SCENES[ROUNDS[game.round].scene];
-}
-
-export function diffsLeft(game) {
-  return DIFFS_PER_ROUND - game.found.size;
-}
-
-/** Start (or restart) the current round with a full clock and hearts. */
-export function startRound(game) {
-  game.found = new Set();
-  game.streak = 0;
-  game.timeLeft = ROUND_SECONDS;
-  game.hearts = HEARTS;
-  game.wrongStreak = 0;
-  game.hintLeft = 0;
-  game.hintCooldown = 0;
-  game.hintTarget = null;
-  game.phase = PHASE_PLAY;
-  game.message = `${ROUNDS[game.round].name}: find ${DIFFS_PER_ROUND} differences.`;
-}
-
-/** Advance the clock; returns 'time-up' when it runs out. */
-export function tick(game, dt) {
-  if (game.phase !== PHASE_PLAY) return null;
-  game.timeLeft -= dt;
-  if (game.hintLeft > 0) {
-    game.hintLeft -= dt;
-    if (game.hintLeft <= 0) game.hintTarget = null;
+function loadBest() {
+  try {
+    if (typeof localStorage === 'undefined') return 0;
+    return Number(localStorage.getItem(BEST_KEY) || 0) || 0;
+  } catch {
+    return 0;
   }
-  if (game.hintCooldown > 0) game.hintCooldown -= dt;
-  if (game.timeLeft <= 0) {
-    game.timeLeft = 0;
-    game.phase = PHASE_OVER;
-    game.message = 'Out of time! Press R to try this round again.';
-    return 'time-up';
-  }
-  return null;
 }
 
-/**
- * A click at panel-local (x, y) on either picture. Returns 'found', 'wrong'
- * or 'none' (a click on an already-found difference). `now` is only used for
- * the streak; the caller passes performance.now() / 1000.
- */
-export function clickAt(game, x, y) {
-  if (game.phase !== PHASE_PLAY) return 'none';
-  const scene = currentScene(game);
-  for (const diff of scene.diffs) {
-    if (game.found.has(diff.id)) continue;
-    const dx = x - diff.x;
-    const dy = y - diff.y;
-    if (dx * dx + dy * dy <= diff.r * diff.r) {
-      game.found.add(diff.id);
-      game.totalFound += 1;
-      const bonus = game.streak * POINTS.streak;
-      game.score += POINTS.find + bonus;
-      game.streak += 1;
-      game.wrongStreak = 0;
-      game.timeLeft = Math.min(ROUND_MAX_SECONDS, game.timeLeft + FIND_BONUS_SECONDS);
-      game.message = `Found it — ${diff.label}! ${diffsLeft(game)} to go.`;
-      if (game.found.size >= DIFFS_PER_ROUND) {
-        const timeBonus = Math.round(game.timeLeft) * POINTS.timePerSecond;
-        game.roundScore = game.score;
-        game.score += timeBonus;
-        game.phase = game.round + 1 >= ROUNDS.length ? PHASE_WIN : PHASE_ROUND_CLEAR;
-        game.message = game.phase === PHASE_WIN
-          ? `All rounds clear! Time bonus +${timeBonus}.`
-          : `Round clear! Time bonus +${timeBonus}. Press Space for the next round.`;
+function saveBest(value) {
+  try {
+    if (typeof localStorage !== 'undefined') localStorage.setItem(BEST_KEY, String(value));
+  } catch {
+    // Best score is a nicety; a blocked storage must never break the game.
+  }
+}
+
+export class TwinTidesGame {
+  constructor() {
+    this.screen = 'title';
+    this.roundIndex = 0;
+    this.found = new Set();
+    this.hearts = RULES.hearts;
+    this.timeLeft = RULES.timerStart;
+    this.score = 0;
+    this.best = loadBest();
+    this.streak = 0;
+    this.hintCooldown = 0;
+    this.hintFlash = null; // { diff, until } — until is seconds of round time left
+    this.lastFound = null; // { diff, at } — at is seconds of round time left
+    this.message = 'Find 7 differences in each picture. Click one — on either side.';
+    this.roundClearBonus = 0;
+    this.totalFound = 0;
+    this.muted = false;
+  }
+
+  get round() {
+    return ROUNDS[this.roundIndex];
+  }
+
+  get foundCount() {
+    return this.found.size;
+  }
+
+  get remaining() {
+    return RULES.differencesPerRound - this.found.size;
+  }
+
+  get flagsA() {
+    return buildFlags(this.roundIndex, false);
+  }
+
+  get flagsB() {
+    return buildFlags(this.roundIndex, true);
+  }
+
+  // Prepare a round's board without changing the screen (used by the title
+  // screen and by screenshot staging).
+  prepareRound(index) {
+    this.roundIndex = index;
+    this.found = new Set();
+    this.hearts = RULES.hearts;
+    this.timeLeft = RULES.timerStart;
+    this.streak = 0;
+    this.hintCooldown = 0;
+    this.hintFlash = null;
+    this.lastFound = null;
+    this.roundClearBonus = 0;
+  }
+
+  startGame() {
+    this.score = 0;
+    this.totalFound = 0;
+    this.prepareRound(0);
+    this.screen = 'play';
+    this.message = `Round 1 — ${this.round.name}. Find all 7 differences!`;
+  }
+
+  startRound(index) {
+    this.prepareRound(index);
+    this.screen = 'play';
+    this.message = `Round ${index + 1} — ${this.round.name}. Find all 7 differences!`;
+  }
+
+  retryRound() {
+    this.startRound(this.roundIndex);
+  }
+
+  nextRound() {
+    if (this.roundIndex + 1 >= ROUNDS.length) {
+      this.finishWin();
+      return;
+    }
+    this.startRound(this.roundIndex + 1);
+  }
+
+  finishWin() {
+    this.screen = 'win';
+    if (this.score > this.best) {
+      this.best = this.score;
+      saveBest(this.best);
+    }
+    this.message = 'You found every difference in all three scenes!';
+  }
+
+  // Advance the clock by dt seconds. Only ticks while playing.
+  tick(dt) {
+    if (this.screen !== 'play') return;
+    this.timeLeft -= dt;
+    if (this.hintCooldown > 0) this.hintCooldown = Math.max(0, this.hintCooldown - dt);
+    if (this.hintFlash && this.timeLeft <= this.hintFlash.until - RULES.hintFlash) this.hintFlash = null;
+    if (this.timeLeft <= 0) {
+      this.timeLeft = 0;
+      this.screen = 'gameOver';
+      this.message = `Time ran out in ${this.round.name}. Press R to retry the round.`;
+    }
+  }
+
+  // A click at panel-local coordinates (either panel — the pictures are twins).
+  // Returns { type: 'found'|'miss'|'ignored', diff?, points? }.
+  clickAt(x, y) {
+    if (this.screen !== 'play') return { type: 'ignored' };
+    const hit = this.round.diffs.find(
+      (d) => !this.found.has(d.id) && (x - d.x) * (x - d.x) + (y - d.y) * (y - d.y) <= d.r * d.r,
+    );
+    if (hit) {
+      this.found.add(hit.id);
+      this.totalFound += 1;
+      this.streak += 1;
+      const points = RULES.pointsPerFind + RULES.streakBonus * (this.streak - 1);
+      this.score += points;
+      this.timeLeft = Math.min(RULES.timerMax, this.timeLeft + RULES.timeBonusPerFind);
+      this.lastFound = { diff: hit, at: this.timeLeft };
+      this.message = `Found it! ${hit.label}  (+${points})`;
+      if (this.found.size >= RULES.differencesPerRound) {
+        this.roundClearBonus = Math.ceil(this.timeLeft) * RULES.timeBonusPerSecondLeft;
+        this.score += this.roundClearBonus;
+        this.screen = 'roundClear';
+        this.message = `Round clear! Time bonus +${this.roundClearBonus}.`;
+        if (this.score > this.best) {
+          this.best = this.score;
+          saveBest(this.best);
+        }
       }
-      return 'found';
+      return { type: 'found', diff: hit, points };
+    }
+    // A wrong click costs a heart and breaks the streak.
+    this.hearts -= 1;
+    this.streak = 0;
+    if (this.hearts <= 0) {
+      this.hearts = 0;
+      this.screen = 'gameOver';
+      this.message = `Out of hearts in ${this.round.name}. Press R to retry the round.`;
+    } else {
+      this.message = 'Not a difference — one heart lost. Look closer!';
+    }
+    return { type: 'miss' };
+  }
+
+  // Spend 50 points to light one unfound difference for 3 seconds.
+  // Returns the hinted diff, or null when no hint is available.
+  useHint() {
+    if (this.screen !== 'play') return null;
+    if (this.hintCooldown > 0) {
+      this.message = `Hint recharging — ${Math.ceil(this.hintCooldown)}s left.`;
+      return null;
+    }
+    const remaining = this.round.diffs.filter((d) => !this.found.has(d.id));
+    if (remaining.length === 0) return null;
+    const diff = remaining[Math.floor(Math.random() * remaining.length)];
+    this.score = Math.max(0, this.score - RULES.hintCost);
+    this.hintCooldown = RULES.hintCooldown;
+    this.hintFlash = { diff, until: this.timeLeft };
+    this.message = `Hint (−${RULES.hintCost}): something sparkles… follow the gold ring!`;
+    return diff;
+  }
+
+  togglePause() {
+    if (this.screen === 'play') {
+      this.screen = 'paused';
+      this.message = 'Paused. Press P to keep hunting.';
+    } else if (this.screen === 'paused') {
+      this.screen = 'play';
+      this.message = `Back to ${this.round.name} — ${this.remaining} to go.`;
     }
   }
-  game.streak = 0;
-  game.wrongStreak += 1;
-  game.message = 'Not quite — look closer.';
-  if (game.wrongStreak >= WRONG_BEFORE_HEART) {
-    game.wrongStreak = 0;
-    game.hearts -= 1;
-    if (game.hearts <= 0) {
-      game.phase = PHASE_OVER;
-      game.message = 'Out of hearts! Press R to try this round again.';
-      return 'over';
-    }
+
+  toggleMute() {
+    this.muted = !this.muted;
+    return this.muted;
   }
-  return 'wrong';
-}
 
-/** Light one unfound difference for a few seconds. Costs points, then rests. */
-export function useHint(game) {
-  if (game.phase !== PHASE_PLAY) return 'none';
-  if (game.hintCooldown > 0 || game.hintLeft > 0) return 'none';
-  if (game.score < POINTS.hint) return 'none';
-  const scene = currentScene(game);
-  const remaining = scene.diffs.filter((d) => !game.found.has(d.id));
-  if (remaining.length === 0) return 'none';
-  game.score -= POINTS.hint;
-  game.hintTarget = remaining[Math.floor(Math.random() * remaining.length)].id;
-  game.hintLeft = HINT.showSeconds;
-  game.hintCooldown = HINT.cooldownSeconds;
-  game.message = `Hint: something hides near the ${game.hintTarget}. (-${POINTS.hint} points)`;
-  return 'hint';
-}
-
-/** Move to the next round after a round-clear. */
-export function nextRound(game) {
-  if (game.phase !== PHASE_ROUND_CLEAR) return;
-  game.round += 1;
-  startRound(game);
-}
-
-/** The hint's ring, when one is showing: the difference it points at. */
-export function hintDiff(game) {
-  if (!game.hintTarget || game.hintLeft <= 0) return null;
-  return currentScene(game).diffs.find((d) => d.id === game.hintTarget) ?? null;
+  // Space / click to start or advance, depending on the screen.
+  advance() {
+    if (this.screen === 'title') this.startGame();
+    else if (this.screen === 'roundClear') this.nextRound();
+    else if (this.screen === 'win' || this.screen === 'gameOver') this.startGame();
+  }
 }

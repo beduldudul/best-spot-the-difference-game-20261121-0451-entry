@@ -1,67 +1,73 @@
-// Tiny sounds, made with the Web Audio API and no files at all: a two-note
-// chime for a find, a low buzz for a miss, a rising arpeggio for a win, and a
-// soft tick for a plain click. Muted until the player turns sound on, and
-// silent when the browser has no audio.
+// Twin Tides — Spot the Difference
+// audio.js — WebAudio chimes, synthesized live. No sound files, no network.
 
-export function createAudio() {
-  let context = null;
-  let muted = false;
-  let enabled = false;
+export class SoundBank {
+  constructor() {
+    this.ctx = null;
+    this.muted = false;
+  }
 
-  function ensure() {
-    if (!context) {
-      const AudioContext = window.AudioContext ?? window.webkitAudioContext;
-      if (!AudioContext) return null;
-      context = new AudioContext();
+  ensure() {
+    if (!this.ctx) {
+      try {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (AC) this.ctx = new AC();
+      } catch {
+        this.ctx = null;
+      }
     }
-    if (context.state === 'suspended') context.resume();
-    return context;
+    if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume();
+    return this.ctx;
   }
 
-  function tone(freq, start, length, type, gain) {
-    if (muted || !enabled) return;
-    const audio = ensure();
-    if (!audio) return;
-    const osc = audio.createOscillator();
-    const amp = audio.createGain();
+  // One short tone: frequency, start delay, length, waveform, volume.
+  tone(freq, delay, dur, type, vol) {
+    if (this.muted) return;
+    const ctx = this.ensure();
+    if (!ctx) return;
+    const t0 = ctx.currentTime + delay;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
     osc.type = type;
-    osc.frequency.value = freq;
-    amp.gain.setValueAtTime(0, audio.currentTime + start);
-    amp.gain.linearRampToValueAtTime(gain, audio.currentTime + start + 0.01);
-    amp.gain.exponentialRampToValueAtTime(0.0001, audio.currentTime + start + length);
-    osc.connect(amp);
-    amp.connect(audio.destination);
-    osc.start(audio.currentTime + start);
-    osc.stop(audio.currentTime + start + length + 0.05);
+    osc.frequency.setValueAtTime(freq, t0);
+    gain.gain.setValueAtTime(0.0001, t0);
+    gain.gain.exponentialRampToValueAtTime(vol, t0 + 0.015);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(t0);
+    osc.stop(t0 + dur + 0.05);
   }
 
-  return {
-    unlock() {
-      enabled = true;
-      ensure();
-    },
-    toggleMute() {
-      muted = !muted;
-      return muted;
-    },
-    isMuted() {
-      return muted;
-    },
-    found() {
-      tone(660, 0, 0.16, 'sine', 0.18);
-      tone(880, 0.09, 0.22, 'sine', 0.18);
-    },
-    wrong() {
-      tone(140, 0, 0.22, 'sawtooth', 0.08);
-    },
-    hint() {
-      tone(520, 0, 0.14, 'triangle', 0.12);
-    },
-    win() {
-      [523, 659, 784, 1047].forEach((freq, i) => tone(freq, i * 0.11, 0.3, 'sine', 0.16));
-    },
-    click() {
-      tone(440, 0, 0.06, 'triangle', 0.06);
-    },
-  };
+  click() {
+    this.tone(660, 0, 0.07, 'triangle', 0.12);
+  }
+
+  found() {
+    this.tone(880, 0, 0.12, 'sine', 0.22);
+    this.tone(1318, 0.09, 0.2, 'sine', 0.22);
+    this.tone(1760, 0.18, 0.28, 'sine', 0.16);
+  }
+
+  miss() {
+    this.tone(180, 0, 0.22, 'sawtooth', 0.12);
+    this.tone(140, 0.1, 0.26, 'sawtooth', 0.1);
+  }
+
+  hint() {
+    this.tone(1046, 0, 0.1, 'triangle', 0.16);
+    this.tone(1568, 0.08, 0.16, 'triangle', 0.14);
+  }
+
+  roundClear() {
+    [523, 659, 784, 1046].forEach((f, i) => this.tone(f, i * 0.11, 0.22, 'sine', 0.2));
+  }
+
+  win() {
+    [523, 659, 784, 1046, 1318, 1568].forEach((f, i) => this.tone(f, i * 0.13, 0.3, 'sine', 0.2));
+  }
+
+  gameOver() {
+    [392, 330, 262].forEach((f, i) => this.tone(f, i * 0.16, 0.3, 'triangle', 0.16));
+  }
 }

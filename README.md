@@ -1,53 +1,49 @@
 # Twin Tides — Spot the Difference
 
-[![make.fun · best-spot-the-difference-game-20261121-0451](https://make.fun/badge/best-spot-the-difference-game-20261121-0451.svg)](https://make.fun/bounty/best-spot-the-difference-game-20261121-0451?utm_source=github&utm_medium=readme&utm_campaign=best-spot-the-difference-game-20261121-0451)
-[![rank](https://make.fun/badge/best-spot-the-difference-game-20261121-0451/beduldudul/best-spot-the-difference-game-20261121-0451-entry/rank.svg)](https://make.fun/bounty/best-spot-the-difference-game-20261121-0451/leaderboard?utm_source=github&utm_medium=readme&utm_campaign=best-spot-the-difference-game-20261121-0451)
-[![reward](https://make.fun/badge/best-spot-the-difference-game-20261121-0451/beduldudul/best-spot-the-difference-game-20261121-0451-entry/reward.svg)](https://make.fun/bounty/best-spot-the-difference-game-20261121-0451?utm_source=github&utm_medium=readme&utm_campaign=best-spot-the-difference-game-20261121-0451)
+[![make.fun bounty](https://img.shields.io/badge/make.fun-bounty-blue)](https://make.fun/bounty/best-spot-the-difference-game-20261121-0451)
+[![game](https://img.shields.io/badge/game-spot--the--difference-teal)](https://make.fun/bounty/best-spot-the-difference-game-20261121-0451)
+[![offline](https://img.shields.io/badge/plays-offline-green)](https://make.fun/bounty/best-spot-the-difference-game-20261121-0451)
 
-Entry for the make.fun bounty
-[Make the best spot the difference game](https://make.fun/bounty/best-spot-the-difference-game-20261121-0451).
+**Twin Tides** is an original spot-the-difference game for the [make.fun bounty](https://make.fun/bounty/best-spot-the-difference-game-20261121-0451): two near-identical pictures side by side, seven differences hiding in each, three hand-drawn scenes to hunt through. Everything is drawn procedurally on canvas — no image files, no libraries, no network requests.
 
-Twin Tides is a complete spot-the-difference game that runs offline in a
-desktop browser from its own files. Two near-identical pictures sit side by
-side — a harbour morning, a market day, a garden at dusk — and seven changes
-hide between them. Click a difference on either picture to ring it, watch the
-counter climb, and beat the clock before the tide runs out.
+## How to play
 
-## How it plays
+- **Click a difference** on either picture — it gets a gold ring and a check on both sides.
+- **3 rounds, 7 differences each** (21 total): Harbor Morning, Market Day, Garden Dusk.
+- **120 seconds per round**, +5s per find (cap 150s). Each find is **+100 points**, plus **+25 per find in a row** (streak bonus). Clearing a round adds **+5 points per second left**.
+- **3 hearts per round** — a wrong click costs one. Timer out or hearts out ends the round.
+- **H** — hint (−50 points, lights one unfound difference for 3s, 10s cooldown).
+- **P** pause · **M** mute · **R** retry the round · **Space** start / next.
+- Best score is kept in `localStorage` under `twin-tides.best`.
 
-- Three rounds, seven differences each, harder as the light fades.
-- Click a difference on either picture: a ring marks it on both, with a
-  chime and a few seconds back on the clock.
-- A wrong click costs a heart. Three hearts a round; lose them, or let the
-  timer run out, and the round starts over.
-- Hints (H) light one hiding difference for a few seconds, for 50 points.
-- Streaks pay: consecutive finds earn a growing bonus.
-- P pauses, M mutes, R retries the round, Space starts.
-
-## Run
+## How to run
 
 ```sh
 node serve.ts
+# open http://localhost:8080
 ```
 
-Then open http://localhost:8080. Or open game/index.html through any static
-server. No network request, no build step, no library.
+Or serve `game/` with any static server (`python3 -m http.server` from `game/`). Open `game/index.html` — it plays offline in desktop Chrome.
+
+## Screenshots
+
+`?shot=` stages the game for screenshots: `start` (title), `play` (round 1, 3 found), `play2` (round 2, 2 found), `end` (win screen). See `shots.json`.
 
 ## Layout
 
-- game/index.html — the page, loads the game.
-- game/src/main.js — boot, the one loop, screens.
-- game/src/config.js — tuning, palette, rounds.
-- game/src/scenes.js — the three hand-drawn scenes and their differences.
-- game/src/game.js — rounds, finds, clock, hearts, hints, score.
-- game/src/render.js — panels, markers, HUD, screens.
-- game/src/input.js — mouse and keyboard.
-- game/src/audio.js — WebAudio chimes, no sound files.
-- game/src/shots.js — the staged scenes behind ?shot= for screenshots.
-- game/src/random.js — a seeded generator.
-- main.ts — hands game/ and screenshots/ in and writes dossier.json.
-- screenshots/ — four real renders of the game's own code.
+- `game/index.html` — the page, loads `game/src/main.js`
+- `game/src/config.js` — tuning, palette, board geometry
+- `game/src/random.js` — seeded RNG (both panels match except the 7 differences)
+- `game/src/scenes.js` — the three scenes + the difference lists + flags builder
+- `game/src/game.js` — rules: state, scoring, timer, hearts, hints, rounds
+- `game/src/render.js` — panels, markers, HUD, overlays
+- `game/src/input.js` — mouse mapping + keyboard
+- `game/src/audio.js` — WebAudio chimes (no sound files)
+- `game/src/shots.js` — screenshot staging
+- `game/src/main.js` — boot + frame loop + `?shot=` support
+- `main.ts` — the entry program: copies `game/` + `screenshots/` to the output dir and writes `dossier.json`
+- `serve.ts` — tiny static server for local play
 
 ## License
 
-MIT. See LICENSE.
+MIT — see `LICENSE`.

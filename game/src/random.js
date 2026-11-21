@@ -1,7 +1,10 @@
-// A small seeded random generator, so a ?seed=N always stages the same scene.
-// Mulberry32: tiny, fast, and good enough for cosmetic jitter.
+// Twin Tides — Spot the Difference
+// random.js — a tiny seeded RNG so the decorative parts of a scene (stars, waves,
+// pebbles, fireflies) are identical in both panels; only the 7 flagged differences
+// ever differ between Picture A and Picture B.
 
-export function createRandom(seed) {
+// mulberry32: small, fast, deterministic.
+export function makeRng(seed) {
   let a = seed >>> 0;
   return function next() {
     a |= 0;
@@ -12,12 +15,21 @@ export function createRandom(seed) {
   };
 }
 
-/** An integer in [min, max] from the generator. */
-export function intBetween(random, min, max) {
-  return min + Math.floor(random() * (max - min + 1));
+export function range(rng, min, max) {
+  return min + rng() * (max - min);
 }
 
-/** Pick one item from an array with the generator. */
-export function pick(random, items) {
-  return items[Math.floor(random() * items.length)];
+export function pick(rng, list) {
+  return list[Math.floor(rng() * list.length)];
+}
+
+export function shuffle(rng, list) {
+  const out = list.slice();
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    const tmp = out[i];
+    out[i] = out[j];
+    out[j] = tmp;
+  }
+  return out;
 }
