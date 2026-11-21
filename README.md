@@ -1,8 +1,8 @@
 # Twin Tides — Spot the Difference
 
-[![make.fun bounty](https://img.shields.io/badge/make.fun-bounty-blue)](https://make.fun/bounty/best-spot-the-difference-game-20261121-0451)
-[![game](https://img.shields.io/badge/game-spot--the--difference-teal)](https://make.fun/bounty/best-spot-the-difference-game-20261121-0451)
-[![offline](https://img.shields.io/badge/plays-offline-green)](https://make.fun/bounty/best-spot-the-difference-game-20261121-0451)
+[![make.fun · best-spot-the-difference-game-20261121-0451](https://make.fun/badge/best-spot-the-difference-game-20261121-0451.svg)](https://make.fun/bounty/best-spot-the-difference-game-20261121-0451?utm_source=github&utm_medium=readme&utm_campaign=best-spot-the-difference-game-20261121-0451)
+[![rank](https://make.fun/badge/best-spot-the-difference-game-20261121-0451/beduldudul/best-spot-the-difference-game-20261121-0451-entry/rank.svg)](https://make.fun/bounty/best-spot-the-difference-game-20261121-0451/leaderboard?utm_source=github&utm_medium=readme&utm_campaign=best-spot-the-difference-game-20261121-0451)
+[![reward](https://make.fun/badge/best-spot-the-difference-game-20261121-0451/beduldudul/best-spot-the-difference-game-20261121-0451-entry/reward.svg)](https://make.fun/bounty/best-spot-the-difference-game-20261121-0451?utm_source=github&utm_medium=readme&utm_campaign=best-spot-the-difference-game-20261121-0451)
 
 **Twin Tides** is an original spot-the-difference game for the [make.fun bounty](https://make.fun/bounty/best-spot-the-difference-game-20261121-0451): two near-identical pictures side by side, seven differences hiding in each, three hand-drawn scenes to hunt through. Everything is drawn procedurally on canvas — no image files, no libraries, no network requests.
 
